@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router";
 import { serverApi } from "../helpers/client-api";
 
 /**
  * RegisterPage Component
- * User registration page with username, email, and password
+ * User registration page with username, email, password, and Google OAuth
  */
 export default function RegisterPage() {
   const [formData, setFormData] = useState({
@@ -31,43 +31,6 @@ export default function RegisterPage() {
     e.preventDefault();
     setError("");
 
-    // // Validation
-    // if (!formData.username.trim()) {
-    //   Swal.fire({
-    //     icon: "error",
-    //     title: "Oops...",
-    //     text: "Username is required!",
-    //   });
-    //   return;
-    // }
-
-    // if (!formData.email.trim()) {
-    //   Swal.fire({
-    //     icon: "error",
-    //     title: "Oops...",
-    //     text: "Email is required!",
-    //   });
-    //   return;
-    // }
-
-    // if (formData.password.length < 6) {
-    //   Swal.fire({
-    //     icon: "error",
-    //     title: "Weak Password",
-    //     text: "Password must be at least 6 characters!",
-    //   });
-    //   return;
-    // }
-
-    // if (formData.password !== formData.confirmPassword) {
-    //   Swal.fire({
-    //     icon: "error",
-    //     title: "Password Mismatch",
-    //     text: "Passwords do not match!",
-    //   });
-    //   return;
-    // }
-
     setIsLoading(true);
 
     console.log("🚀 ~ handleSubmit ~ formData:", formData);
@@ -78,10 +41,6 @@ export default function RegisterPage() {
         password: formData.password,
         passwordConfirm: formData.confirmPassword,
       });
-
-      // if (!response.ok) {
-      //   throw new Error(response.data.message || "Registration failed");
-      // }
 
       // Success - redirect to login
       await Swal.fire({
@@ -117,6 +76,104 @@ export default function RegisterPage() {
       setIsLoading(false);
     }
   };
+
+  async function handleCredentialResponse(credentialResponse) {
+    console.log("🔐 Google credential received");
+
+    setError("");
+    setIsLoading(true);
+
+    try {
+      const response = await serverApi.post("/auth/google", {
+        googleAccessToken: credentialResponse.credential,
+      });
+
+      // Store token in localStorage
+      localStorage.setItem("token", response.data.data.token);
+
+      // Success - redirect to home
+      await Swal.fire({
+        icon: "success",
+        title: "Welcome!",
+        text: "Login successful!",
+        confirmButtonText: "Continue",
+        confirmButtonColor: "#3085d6",
+        timer: 1500,
+      });
+
+      navigate("/");
+    } catch (err) {
+      console.log("🚀 ~ handleSubmit ~ err:", err);
+      // Error alert - Let Axios handle validation
+      Swal.fire({
+        icon: "error",
+        title: "Google Registration Failed",
+        text:
+          err.response?.data?.message ||
+          "Failed to register with Google. Please try again.",
+        confirmButtonText: "Try Again",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  /**
+   * Initialize Google OAuth button
+   */
+  useEffect(() => {
+    // window.onload = function () {
+    //   google.accounts.id.initialize({
+    //     client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+    //     callback: handleCredentialResponse,
+    //   });
+    //   google.accounts.id.renderButton(
+    //     document.getElementById("buttonDiv"),
+    //     { theme: "outline", size: "large" } // customization attributes
+    //   );
+    //   // google.accounts.id.prompt(); // also display the One Tap dialog
+    // };
+
+    const initializeGoogle = () => {
+      if (window.google && window.google.accounts) {
+        window.google.accounts.id.initialize({
+          client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+          callback: handleCredentialResponse,
+        });
+        const buttonDiv = document.getElementById("buttonDiv");
+        if (buttonDiv) {
+          window.google.accounts.id.renderButton(buttonDiv, {
+            theme: "outline",
+            size: "large",
+            text: "signup_with",
+            width: 280,
+          });
+        }
+        console.log("✅ Google Sign-In initialized");
+      } else {
+        console.error("❌ Google Identity Services not loaded");
+      }
+    };
+    initializeGoogle();
+    // // // Check if Google script is already loaded
+    // if (window.google && window.google.accounts) {
+    //   initializeGoogle();
+    // } else {
+    //   // Load Google Identity Services script if not loaded
+    //   const script = document.createElement("script");
+    //   script.src = "https://accounts.google.com/gsi/client";
+    //   script.async = true;
+    //   script.defer = true;
+    //   script.onload = initializeGoogle;
+    //   document.body.appendChild(script);
+    //   // Cleanup function
+    //   return () => {
+    //     if (script.parentNode) {
+    //       script.parentNode.removeChild(script);
+    //     }
+    //   };
+    // }
+  }, []);
 
   return (
     <div className="auth-container">
@@ -188,9 +245,12 @@ export default function RegisterPage() {
             />
           </div>
 
-          <button type="submit" disabled={isLoading} className="btn-primary">
-            {isLoading ? "Creating Account..." : "Register"}
-          </button>
+          <div className="d-flex flex-column align-items-center gap-3">
+            <button type="submit" disabled={isLoading} className="btn-primary">
+              {isLoading ? "Creating Account..." : "Register"}
+            </button>
+            <div id="buttonDiv"></div>
+          </div>
         </form>
 
         <p className="auth-footer">

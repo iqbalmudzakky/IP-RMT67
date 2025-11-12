@@ -1,11 +1,50 @@
 const { User } = require("../models");
 const { hashPassword, comparePassword } = require("../helpers/bcrypt");
 const { generateToken } = require("../helpers/jwt");
+const { OAuth2Client } = require("google-auth-library");
+const client = new OAuth2Client();
 
 /**
- * AuthController - Mengelola semua operasi autentikasi
+ * AuthController - Handle all authentication operations.
  */
 class AuthController {
+  static async googleLogin(req, res, next) {
+    try {
+      const ticket = await client.verifyIdToken({
+        idToken: req.body.googleAccessToken,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+      const payload = ticket.getPayload();
+
+      let user = await User.findOne({ where: { email: payload.email } });
+      if (!user) {
+        // If the user does not exist, create a new user.
+        user = await User.create({
+          name: payload.name,
+          email: payload.email,
+          password: null,
+          GoogleId: null,
+        });
+      }
+
+      const token = generateToken({ id: user.id, email: user.email });
+      return res.status(200).json({
+        success: true,
+        message: "Login successful",
+        data: {
+          user: {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+          },
+          token,
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   /**
    * @route POST /auth/register
    * @desc Register user baru dengan email & password
