@@ -2,11 +2,14 @@ import { BrowserRouter, Route, Routes } from "react-router";
 
 import AuthLayout from "./layouts/AuthLayout";
 import ProtectedLayout from "./layouts/ProtectedLayout";
+import AdminLayout from "./layouts/AdminLayout";
 import RegisterPage from "./pages/RegisterPage";
 import LoginPage from "./pages/LoginPage";
 import HomePage from "./pages/HomePage";
 import FavoritePage from "./pages/FavoritePage";
 import DetailGame from "./pages/DetailGame";
+import AdminHomePage from "./pages/AdminHomePage";
+import AdminEditPage from "./pages/AdminEditPage";
 
 function App() {
   return (
@@ -23,6 +26,12 @@ function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/favorites" element={<FavoritePage />} />
           <Route path="/game/:id" element={<DetailGame />} />
+        </Route>
+
+        {/* Admin Routes - Admin Only Pages */}
+        <Route element={<AdminLayout />}>
+          <Route path="/admin" element={<AdminHomePage />} />
+          <Route path="/admin/edit/:id" element={<AdminEditPage />} />
         </Route>
       </Routes>
     </BrowserRouter>
