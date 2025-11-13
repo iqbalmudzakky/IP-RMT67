@@ -14,10 +14,6 @@
     "dialect": "postgres"
   },
   "production": {
-    "username": "postgres",
-    "password": "your_production_password",
-    "database": "gamehub_insight_production",
-    "host": "your_production_host",
-    "dialect": "postgres"
+    "use_env_variable": "DATABASE_URL"
   }
 }
