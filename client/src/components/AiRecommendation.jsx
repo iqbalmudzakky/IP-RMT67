@@ -99,9 +99,9 @@ export default function AiRecommendation() {
       } else if (err.code === "ERR_NETWORK") {
         setError("Network error. Please check your connection");
       } else {
-        setError(
-          err.response?.data?.message || "Failed to load recommendations"
-        );
+        setError();
+        ("Failed to load recommendations");
+        // err.response?.data?.message || "Failed to load recommendations";
       }
     } finally {
       setLoading(false);

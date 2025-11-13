@@ -1,77 +1,34 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
+import { useDispatch, useSelector } from "react-redux";
 import { serverApi } from "../helpers/client-api";
+import { getFavorites, removeFavorite } from "../redux/slices/favoriteSlice";
 
 export default function FavoritePage() {
   const navigate = useNavigate();
-  const [favorites, setFavorites] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+
+  // Redux hooks
+  const dispatch = useDispatch();
+  const {
+    items: favorites,
+    loading,
+    error,
+  } = useSelector((state) => state.favorites);
+
+  // Local state for tracking which game is being removed
   const [removingGameId, setRemovingGameId] = useState(null);
 
-  const fetchFavorites = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const response = await serverApi.get("/favorites", {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-      });
-
-      if (response.data.success) {
-        setFavorites(response.data.data);
-      }
-    } catch (err) {
-      console.error("Failed to fetch favorites:", err);
-
-      if (err.response?.status === 401) {
-        setError("Please login to view your favorites");
-      } else {
-        setError(err.response?.data?.message || "Failed to load favorites");
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  /**
+   * Fetch favorites using Redux
+   * Dispatches the getFavorites thunk when component mounts
+   */
   useEffect(() => {
-    fetchFavorites();
-  }, []);
+    dispatch(getFavorites());
+  }, [dispatch]);
 
   const handleSeeDetail = (gameId) => {
     navigate(`/game/${gameId}`);
   };
-
-  /**
-   * Trigger AI recommendation refresh (with error handling for Gemini API)
-   * This updates the AI recommendation cache after favorites change
-   */
-  // const refreshAiRecommendation = async () => {
-  //   try {
-  //     // Call AI recommend endpoint to generate fresh recommendations
-  //     await serverApi.get("/ai/recommend", {
-  //       headers: {
-  //         Authorization: `Bearer ${localStorage.getItem("token")}`,
-  //       },
-  //     });
-
-  //     console.log("✅ AI recommendations refreshed successfully");
-  //   } catch (err) {
-  //     // Gracefully handle Gemini API failures
-  //     // Don't show error to user - this is a background operation
-  //     console.warn(
-  //       "⚠️ AI recommendation refresh failed (non-critical):",
-  //       err.message
-  //     );
-
-  //     // Log specific error for debugging
-  //     if (err.response?.status === 500) {
-  //       console.warn("Gemini API may be temporarily unavailable");
-  //     }
-  //   }
-  // };
 
   /**
    * Refresh AI recommendations with retry logic
@@ -139,7 +96,8 @@ export default function FavoritePage() {
   };
 
   /**
-   * Remove game from favorites
+   * Remove game from favorites using Redux
+   * Dispatches the Redux thunk action and handles the result
    */
   const handleRemoveFavorite = async (gameId, gameTitle) => {
     // Confirm removal with SweetAlert
@@ -161,56 +119,45 @@ export default function FavoritePage() {
     try {
       setRemovingGameId(gameId);
 
-      // Remove from backend
-      const response = await serverApi.delete(`/favorites/${gameId}`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
+      // Dispatch the Redux thunk
+      // unwrap() extracts the payload or throws an error
+      const result = await dispatch(removeFavorite(gameId)).unwrap();
+
+      // Success! Show success message
+      Swal.fire({
+        icon: "success",
+        title: "Removed!",
+        text: `"${gameTitle}" has been removed from your favorites.`,
+        confirmButtonColor: "#00adb5",
+        timer: 2000,
       });
 
-      if (response.data.success) {
-        // Update local state - remove from favorites array
-        setFavorites((prevFavorites) =>
-          prevFavorites.filter((fav) => fav.Game.id !== gameId)
-        );
-
-        // Show success message
-        Swal.fire({
-          icon: "success",
-          title: "Removed!",
-          text: `"${gameTitle}" has been removed from your favorites.`,
-          confirmButtonColor: "#00adb5",
-          timer: 2000,
+      // Refresh AI recommendations in background (non-blocking)
+      // This ensures /ai/history will have fresh data on next visit
+      refreshAiRecommendation()
+        .then((success) => {
+          if (success) {
+            console.log(
+              "🎯 AI cache updated - HomePage will show fresh recommendations"
+            );
+          } else {
+            console.log(
+              "⚠️ AI cache update failed - Old recommendations may still appear"
+            );
+          }
+        })
+        .catch((err) => {
+          console.warn("AI refresh error (non-critical):", err);
         });
-
-        // Refresh AI recommendations in background (non-blocking)
-        // This ensures /ai/history will have fresh data on next visit
-        refreshAiRecommendation()
-          .then((success) => {
-            if (success) {
-              console.log(
-                "🎯 AI cache updated - HomePage will show fresh recommendations"
-              );
-            } else {
-              console.log(
-                "⚠️ AI cache update failed - Old recommendations may still appear"
-              );
-            }
-          })
-          .catch((err) => {
-            console.warn("AI refresh error (non-critical):", err);
-          });
-      }
     } catch (err) {
+      // Error is already in Redux state, extract from err.message
       console.error("Failed to remove favorite:", err);
 
       // Show error alert
       Swal.fire({
         icon: "error",
         title: "Failed to Remove",
-        text:
-          err.response?.data?.message ||
-          "Failed to remove from favorites. Please try again.",
+        text: err.message || "Failed to remove from favorites. Please try again.",
         confirmButtonText: "OK",
       });
     } finally {
@@ -267,7 +214,10 @@ export default function FavoritePage() {
           >
             <div className="error-icon">⚠️</div>
             <p className="error-text">{error}</p>
-            <button className="retry-btn" onClick={fetchFavorites}>
+            <button
+              className="retry-btn"
+              onClick={() => dispatch(getFavorites())}
+            >
               Retry
             </button>
           </div>

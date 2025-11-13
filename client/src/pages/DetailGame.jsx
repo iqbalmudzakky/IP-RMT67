@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router";
+import { useDispatch, useSelector } from "react-redux";
 import { serverApi } from "../helpers/client-api";
+import { addToFavorite } from "../redux/slices/favoriteSlice";
 
 /**
  * DetailGame Component
@@ -10,11 +12,14 @@ import { serverApi } from "../helpers/client-api";
 export default function DetailGame() {
   const { id } = useParams();
   const navigate = useNavigate();
+  
+  // Redux hooks
+  const dispatch = useDispatch();
+  const { loading: addingToFavorite } = useSelector((state) => state.favorites);
 
   const [game, setGame] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [addingToFavorite, setAddingToFavorite] = useState(false);
 
   /**
    * Fetch game details from backend
@@ -118,67 +123,58 @@ export default function DetailGame() {
   };
 
   /**
-   * Add game to favorites with AI recommendation refresh
-   * Uses POST /favorites/:gameId endpoint
-   * After successful addition, triggers AI recommendation update
+   * Add game to favorites using Redux
+   * Dispatches the Redux thunk action and handles the result
    */
   const handleAddToFavorite = async () => {
     try {
-      setAddingToFavorite(true);
+      // Dispatch the Redux thunk
+      // unwrap() extracts the payload or throws an error
+      const result = await dispatch(addToFavorite(game.id)).unwrap();
 
-      const response = await serverApi.post(
-        `/favorites/${game.id}`,
-        {},
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-        }
-      );
+      // Success! Show success message
+      await Swal.fire({
+        icon: "success",
+        title: "Added to Favorites!",
+        text: `${game.title} has been added to your favorites.`,
+        confirmButtonText: "Great!",
+        confirmButtonColor: "#00adb5",
+        timer: 2000,
+        showConfirmButton: false,
+      });
 
-      if (response.data.success) {
-        await Swal.fire({
-          icon: "success",
-          title: "Added to Favorites!",
-          text: `${game.title} has been added to your favorites.`,
-          confirmButtonText: "Great!",
-          confirmButtonColor: "#00adb5",
-          timer: 2000,
-          showConfirmButton: false,
+      // Refresh AI recommendations in background (non-blocking)
+      refreshAiRecommendation()
+        .then((success) => {
+          if (success) {
+            console.log(
+              "🎯 AI cache updated - HomePage will show fresh recommendations"
+            );
+          } else {
+            console.log(
+              "⚠️ AI cache update failed - Old recommendations may still appear"
+            );
+          }
+        })
+        .catch((err) => {
+          console.warn("AI refresh error (non-critical):", err);
         });
-
-        // Run in background without waiting
-        refreshAiRecommendation()
-          .then((success) => {
-            if (success) {
-              console.log(
-                "🎯 AI cache updated - HomePage will show fresh recommendations"
-              );
-            } else {
-              console.log(
-                "⚠️ AI cache update failed - Old recommendations may still appear"
-              );
-            }
-          })
-          .catch((err) => {
-            console.warn("AI refresh error (non-critical):", err);
-          });
-      }
     } catch (err) {
+      // Error is already in Redux state, extract from err.message
       console.error("Failed to add to favorites:", err);
 
-      // Handle duplicate favorite error
-      if (err.response?.status === 400) {
+      // Handle different error cases
+      if (err.status === 400) {
+        // Duplicate favorite
         Swal.fire({
           icon: "info",
           title: "Already in Favorites",
-          text:
-            err.response?.data?.message ||
-            "This game is already in your favorites.",
+          text: err.message || "This game is already in your favorites.",
           confirmButtonText: "OK",
           confirmButtonColor: "#00adb5",
         });
-      } else if (err.response?.status === 401) {
+      } else if (err.status === 401) {
+        // Unauthorized
         Swal.fire({
           icon: "error",
           title: "Authentication Required",
@@ -189,17 +185,14 @@ export default function DetailGame() {
           navigate("/login");
         });
       } else {
+        // Generic error
         Swal.fire({
           icon: "error",
           title: "Failed to Add",
-          text:
-            err.response?.data?.message ||
-            "Failed to add to favorites. Please try again.",
+          text: err.message || "Failed to add to favorites. Please try again.",
           confirmButtonText: "Try Again",
         });
       }
-    } finally {
-      setAddingToFavorite(false);
     }
   };
 
